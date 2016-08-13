@@ -229,10 +229,24 @@ func (p *Player) Fulfill(g *discordgo.Guild) {
 }
 
 func (p *Player) Play(ctx context.Context, g *discordgo.Guild, mutex *redsync.Mutex) {
+	extendTicker := time.NewTicker(10 * time.Second)
+
 	rconn := p.Pool.Get()
 	defer rconn.Close()
 
-	extendTicker := time.NewTicker(10 * time.Second)
+	cid, err := redis.String(rconn.Do("GET", KeyForServerChannel(g.ID)))
+	if err != nil {
+		log.WithError(err).WithField("gid", g.ID).Error("Player: Play: Couldn't get voice channel ID")
+		return
+	}
+
+	vc, err := p.Session.ChannelVoiceJoin(g.ID, cid, false, false)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{"gid": g.ID, "cid": cid}).Error("Player: Play: Couldn't join channel")
+		return
+	}
+	defer vc.Disconnect()
+
 	for {
 		var currentTrack Track
 		for {

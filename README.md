@@ -38,6 +38,10 @@ List of tracks (JSON encoded) in the current playlist, FIFO.
 
 Playback state of the server: `playing` or `stopped`. (This key is [watched for changes](http://redis.io/topics/notifications)).
 
+### `hiqty:server:[ID]:channel`
+
+Voice channel ID to play music in.
+
 ### `hiqty:server:[ID]:player_lock`
 
 Lock to ensure that only a single player instance is active for a server at any given time.

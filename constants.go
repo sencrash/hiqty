@@ -18,6 +18,9 @@ func KeyForServerPlaylist(gid string) string { return KeyForServer(gid, "playlis
 // KeyForServerState returns the redis key for a server's state.
 func KeyForServerState(gid string) string { return KeyForServer(gid, "state") }
 
+// KeyForServerState returns the redis key for a server's active channel.
+func KeyForServerChannel(gid string) string { return KeyForServer(gid, "channel") }
+
 // KeyForServerPlayerLock returns the redis key for a server's player lock.
 func KeyForServerPlayerLock(gid string) string { return KeyForServer(gid, "player_lock") }
 
