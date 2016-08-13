@@ -4,12 +4,14 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
+	"github.com/garyburd/redigo/redis"
 	"github.com/joho/godotenv"
 	"golang.org/x/net/context"
 	"gopkg.in/urfave/cli.v2"
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 )
 
 func actionRun(cc *cli.Context) error {
@@ -21,6 +23,21 @@ func actionRun(cc *cli.Context) error {
 	session, err := discordgo.New(token)
 	if err != nil {
 		return cli.Exit(err.Error(), 1)
+	}
+
+	redisAddr := cc.String("redis")
+	pool := &redis.Pool{
+		IdleTimeout: 2 * time.Minute,
+		Dial: func() (redis.Conn, error) {
+			return redis.Dial("tcp", redisAddr)
+		},
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			if time.Since(t) < time.Minute {
+				return nil
+			}
+			_, err := c.Do("PING")
+			return err
+		},
 	}
 
 	// Log connection state changes.
@@ -44,7 +61,10 @@ func actionRun(cc *cli.Context) error {
 	wg := sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(context.Background())
 
-	responder := Responder{Session: session}
+	responder := Responder{
+		Session: session,
+		Pool:    pool,
+	}
 	wg.Add(1)
 	go func() {
 		log.Info("Responder: Initializing")
@@ -53,7 +73,10 @@ func actionRun(cc *cli.Context) error {
 		wg.Done()
 	}()
 
-	player := Player{Session: session}
+	player := Player{
+		Session: session,
+		Pool:    pool,
+	}
 	wg.Add(1)
 	go func() {
 		log.Info("Player: Initializing")
@@ -72,6 +95,7 @@ func actionRun(cc *cli.Context) error {
 	quit := make(chan os.Signal)
 	signal.Notify(quit)
 	<-quit
+	signal.Reset()
 
 	// Shut down subsystems, wait for them to finish.
 	cancel()
@@ -114,6 +138,15 @@ func main() {
 	app.Name = "hiqty"
 	app.Usage = "A high quality Discord music bot"
 	app.HideVersion = true
+	app.Flags = []cli.Flag{
+		&cli.StringFlag{
+			Name:    "redis",
+			Aliases: []string{"r"},
+			Usage:   "Redis address",
+			EnvVars: []string{"HIQTY_REDIS"},
+			Value:   "127.0.0.1:6379",
+		},
+	}
 	app.Commands = []*cli.Command{
 		&cli.Command{
 			Name:   "run",

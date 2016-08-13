@@ -4,6 +4,7 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
+	"github.com/garyburd/redigo/redis"
 	"github.com/mvdan/xurls"
 	"golang.org/x/net/context"
 	"strings"
@@ -14,6 +15,7 @@ import (
 // communication is to be done through a central message bus.
 type Responder struct {
 	Session *discordgo.Session
+	Pool    *redis.Pool
 
 	mentionByUsername string // <@USER_SNOWFLAKE_ID>
 	mentionByNickname string // <@!USER_SNOWFLAKE_ID>
@@ -24,14 +26,12 @@ type Responder struct {
 func (r *Responder) Run(ctx context.Context) {
 	// Registering a handler returns a function that unregisters it.
 	deregReady := r.Session.AddHandler(r.HandleReady)
+	defer deregReady()
 	deregMessageCreate := r.Session.AddHandler(r.HandleMessageCreate)
+	defer deregMessageCreate()
 
 	// Wait for the context to terminate.
 	<-ctx.Done()
-
-	// Unregister handlers for a clean detach.
-	deregMessageCreate()
-	deregReady()
 }
 
 // HandleReady handles the ready event.

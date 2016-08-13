@@ -34,6 +34,10 @@ Redis Schema
 
 List of tracks (JSON encoded) in the current playlist, FIFO.
 
+### `hiqty:server:[ID]:state`
+
+Playback state of the server: `playing` or `stopped`. (This key is [watched for changes](http://redis.io/topics/notifications)).
+
 ### `hiqty:server:[ID]:player_lock`
 
 Lock to ensure that only a single player instance is active for a server at any given time.
