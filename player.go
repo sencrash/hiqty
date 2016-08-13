@@ -63,34 +63,38 @@ func (p *Player) HandleGuildDelete(_ *discordgo.Session, g *discordgo.GuildDelet
 	p.stateWatchPS.Unsubscribe(TopicForKeyspaceEvent(0, KeyForServerState(g.ID)))
 	p.stateWatchMutex.Unlock()
 
+	// Nuke all server-related keys from Redis
+	match := KeyForServer(g.ID, "*")
+	log.WithField("match", match).Info("Player: GuildDelete: Cleaning redis...")
+
+	cursor := int64(0)
 	rconn := p.Pool.Get()
 	defer rconn.Close()
-
-	cursor := "0"
-	match := KeyForServer(g.ID, "*")
 	for {
-		values, err := redis.Values(rconn.Do("SCAN", cursor, match))
+		values, err := redis.Values(rconn.Do("SCAN", cursor, "MATCH", match, "COUNT", 100))
 		if err != nil {
 			log.WithError(err).Error("Player: GuildDelete: Couldn't scan server-related keys!")
 			return
 		}
 
-		var keys []string
-		if _, err := redis.Scan(values, &cursor, keys); err != nil {
-			log.WithError(err).Error("Player: GuildDelete: Couldn't decode values!")
+		var keys [][]byte
+		if _, err := redis.Scan(values, &cursor, &keys); err != nil {
+			log.WithError(err).Error("Player: GuildDelete: Couldn't decode response!")
 			return
 		}
 
-		delArgs := redis.Args{}
-		for _, key := range keys {
-			delArgs = delArgs.Add(key)
-		}
-		if _, err := rconn.Do("DEL", delArgs); err != nil {
-			log.WithError(err).Error("Player: GuildDelete: Couldn't delete key batch!")
-			return
+		if len(keys) > 0 {
+			delArgs := make([]interface{}, len(keys))
+			for i, key := range keys {
+				delArgs[i] = key
+			}
+			if _, err := redis.Int(rconn.Do("DEL", delArgs...)); err != nil {
+				log.WithError(err).Error("Player: GuildDelete: Couldn't delete key batch!")
+				return
+			}
 		}
 
-		if cursor == "0" {
+		if cursor == 0 {
 			break
 		}
 	}
