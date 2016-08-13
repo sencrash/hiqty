@@ -20,7 +20,7 @@ func actionRun(cc *cli.Context) error {
 		return cli.Exit("Missing bot token", 1)
 	}
 
-	session, err := discordgo.New(token)
+	session, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return cli.Exit(err.Error(), 1)
 	}
@@ -110,7 +110,7 @@ func actionInfo(cc *cli.Context) error {
 		return cli.Exit("Missing bot token", 1)
 	}
 
-	session, err := discordgo.New(token)
+	session, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return cli.Exit(err.Error(), 1)
 	}
