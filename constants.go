@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"strings"
 )
 
 // Required permissions for the bot to function.
@@ -23,4 +24,14 @@ func KeyForServerPlayerLock(gid string) string { return KeyForServer(gid, "playe
 // TopicForKeyspaceEvent returns the topic for keyspace events on the given key.
 func TopicForKeyspaceEvent(db int, key string) string {
 	return fmt.Sprintf("__keyspace@%d__:%s", db, key)
+}
+
+// GIDFromKey returns the concerned GID from a redis key.
+func GIDFromKey(key string) string {
+	return strings.Split(key, ":")[2]
+}
+
+// GIDFromKeyspaceEventTopic returns the concerned GID from a keyspace event topic.
+func GIDFromKeyspaceEventTopic(topic string) string {
+	return strings.Split(topic, ":")[3]
 }

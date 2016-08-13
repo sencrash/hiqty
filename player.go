@@ -5,7 +5,9 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
 	"golang.org/x/net/context"
+	"gopkg.in/redsync.v1"
 	"sync"
+	"time"
 )
 
 // The Player subsystem watches Redis for tracks to play, and carries out this most important of
@@ -14,16 +16,28 @@ import (
 type Player struct {
 	Session *discordgo.Session
 	Pool    *redis.Pool
+	Redsync *redsync.Redsync
+
+	// Active voice connections keyed by GID.
+	vcCancels   map[string]context.CancelFunc
+	vcMutex     sync.Mutex
+	vcWaitGroup sync.WaitGroup
 
 	// Pub/Sub connection that watches servers' `state` key; use the mutex when issuing commands.
 	// (Subscriptions are handled by HandleGuildCreate and HandleGuildDelete.)
 	stateWatchPS    redis.PubSubConn
 	stateWatchMutex sync.Mutex
+
+	// If we're shutting down, we don't want to go starting new tracks.
+	isShuttingDown bool
 }
 
 // Run runs the player. It will not return until both the context has finished, and there are no
 // more tracks currently playing.
 func (p *Player) Run(ctx context.Context) {
+	// Create the redsync distributed lock manager.
+	p.Redsync = redsync.New([]redsync.Pool{p.Pool})
+
 	// Make sure keyspace notifications are enabled, then create the state watcher out of that.
 	stateWatchRConn := p.Pool.Get()
 	_, err := stateWatchRConn.Do("CONFIG", "SET", "notify-keyspace-events", "AKE")
@@ -42,17 +56,24 @@ func (p *Player) Run(ctx context.Context) {
 	deregGuildDelete := p.Session.AddHandler(p.HandleGuildDelete)
 	defer deregGuildDelete()
 
-	// Wait for the context to terminate.
+	// Wait for the context to terminate, then mark the player as shutting down. This will prevent
+	// it from accepting any new tracks.
 	<-ctx.Done()
+	p.isShuttingDown = true
+
+	// Wait for all currently playing tracks to finish playing.
+	p.vcWaitGroup.Wait()
 }
 
 // HandleGuildCreate handles guild creation events. A batch of these are sent on startup, and the
 // list of available servers is to be considered Eventually Consistent(tm).
 func (p *Player) HandleGuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) {
 	p.stateWatchMutex.Lock()
-	defer p.stateWatchMutex.Unlock()
-
 	p.stateWatchPS.Subscribe(TopicForKeyspaceEvent(0, KeyForServerState(g.ID)))
+	p.stateWatchMutex.Unlock()
+
+	// Make sure the guild's state is being carried out properly.
+	p.Fulfill(g.Guild)
 }
 
 // HandleGuildDelete handles guild deletion events. This is also sent when the bot is ejected from
@@ -108,13 +129,21 @@ func (p *Player) ListenForStateKeyChanges(ctx context.Context) {
 			log.WithFields(log.Fields{
 				"chan": v.Channel,
 				"data": string(v.Data),
-			}).Info("Received Message")
+			}).Info("Player: ListenForStateKeyChanges: Message received")
+
+			gid := GIDFromKeyspaceEventTopic(v.Channel)
+			g, err := p.Session.State.Guild(gid)
+			if err != nil {
+				log.WithError(err).Error("Player: ListenForStateKeyChanges: Couldn't look up guild")
+				break
+			}
+			go p.Fulfill(g)
 		case redis.Subscription:
 			log.WithFields(log.Fields{
 				"chan":  v.Channel,
 				"count": v.Count,
 				"kind":  v.Kind,
-			}).Info("Subscription")
+			}).Info("Player: ListenForStateKeyChanges: Subscription")
 		case error:
 			// This may not be a real error - we may be shutting down
 			select {
@@ -125,4 +154,56 @@ func (p *Player) ListenForStateKeyChanges(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// Fulfill looks at the recorded state for a guild in Redis, and ensures that it
+// corresponds to the actual state.
+func (p *Player) Fulfill(g *discordgo.Guild) {
+	rconn := p.Pool.Get()
+	defer rconn.Close()
+
+	// If there's nothing playing in this guild, just ignore it.
+	state, err := redis.String(rconn.Do("GET", KeyForServerState(g.ID)))
+	if err != nil && err != redis.ErrNil {
+		log.WithError(err).WithField("gid", g.ID).Error("Player: Fulfill: Couldn't get guild state")
+		return
+	}
+
+	switch state {
+	case "", "stopped":
+		// If nothing should be playing, shut down any player we hold in this guild.
+		p.vcMutex.Lock()
+		if cancel := p.vcCancels[g.ID]; cancel != nil {
+			cancel()
+		}
+		p.vcMutex.Unlock()
+	case "playing":
+		// If there should be something playing, but we're already doing that, do nothing.
+		p.vcMutex.Lock()
+		if _, ok := p.vcCancels[g.ID]; ok {
+			p.vcMutex.Unlock()
+			break
+		}
+		p.vcMutex.Unlock()
+
+		// If we're not playing anything, but should, try to acquire the guild's player lock. This
+		// will be retried until it succeeds, under the assumption that any wait is caused by
+		// an old player instance that's waiting for a song to finish playing before shutting down.
+		mutex := p.Redsync.NewMutex(KeyForServerPlayerLock(g.ID), redsync.SetExpiry(15*time.Second), redsync.SetTries(1))
+		for {
+			if err = mutex.Lock(); err != nil {
+				log.WithError(err).WithField("gid", g.ID).Warn("Player: Fulfill: Couldn't aquire lock")
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			break
+		}
+		log.WithField("gid", g.ID).Info("Player: Fulfill: Lock claimed")
+
+		// Spawn a player goroutine to handle the rest
+		go p.Play(g, mutex)
+	}
+}
+
+func (p *Player) Play(g *discordgo.Guild, mutex *redsync.Mutex) {
 }
