@@ -250,6 +250,9 @@ func (p *Player) Play(ctx context.Context, g *discordgo.Guild, mutex *redsync.Mu
 			}
 			if err := json.Unmarshal(bytes[0], &currentTrack); err != nil {
 				log.WithError(err).WithField("gid", g.ID).Error("Player: Play: Discarding malformed track")
+				if _, err := rconn.Do("LPOP", KeyForServerPlaylist(g.ID)); err != nil {
+					log.WithError(err).WithField("gid", g.ID).Error("Player: Play: Couldn't pop malformed track")
+				}
 				continue
 			}
 			break
