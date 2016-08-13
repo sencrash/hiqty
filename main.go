@@ -73,10 +73,7 @@ func actionRun(cc *cli.Context) error {
 		wg.Done()
 	}()
 
-	player := Player{
-		Session: session,
-		Pool:    pool,
-	}
+	player := NewPlayer(session, pool)
 	wg.Add(1)
 	go func() {
 		log.Info("Player: Initializing")

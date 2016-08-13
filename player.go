@@ -16,7 +16,9 @@ import (
 type Player struct {
 	Session *discordgo.Session
 	Pool    *redis.Pool
-	Redsync *redsync.Redsync
+
+	// Distributed lock manager using the redsync algorithm.
+	redsync *redsync.Redsync
 
 	// Active voice connections keyed by GID.
 	vcCancels   map[string]context.CancelFunc
@@ -32,12 +34,18 @@ type Player struct {
 	isShuttingDown bool
 }
 
+func NewPlayer(s *discordgo.Session, p *redis.Pool) *Player {
+	return &Player{
+		Session:   s,
+		Pool:      p,
+		redsync:   redsync.New([]redsync.Pool{p}),
+		vcCancels: make(map[string]context.CancelFunc),
+	}
+}
+
 // Run runs the player. It will not return until both the context has finished, and there are no
 // more tracks currently playing.
 func (p *Player) Run(ctx context.Context) {
-	// Create the redsync distributed lock manager.
-	p.Redsync = redsync.New([]redsync.Pool{p.Pool})
-
 	// Make sure keyspace notifications are enabled, then create the state watcher out of that.
 	stateWatchRConn := p.Pool.Get()
 	_, err := stateWatchRConn.Do("CONFIG", "SET", "notify-keyspace-events", "AKE")
@@ -181,6 +189,7 @@ func (p *Player) Fulfill(g *discordgo.Guild) {
 		// If there should be something playing, but we're already doing that, do nothing.
 		p.vcMutex.Lock()
 		if _, ok := p.vcCancels[g.ID]; ok {
+			log.WithField("gid", g.ID).Info("Player: Fulfill: Already playing in guild")
 			p.vcMutex.Unlock()
 			break
 		}
@@ -189,7 +198,7 @@ func (p *Player) Fulfill(g *discordgo.Guild) {
 		// If we're not playing anything, but should, try to acquire the guild's player lock. This
 		// will be retried until it succeeds, under the assumption that any wait is caused by
 		// an old player instance that's waiting for a song to finish playing before shutting down.
-		mutex := p.Redsync.NewMutex(KeyForServerPlayerLock(g.ID), redsync.SetExpiry(15*time.Second), redsync.SetTries(1))
+		mutex := p.redsync.NewMutex(KeyForServerPlayerLock(g.ID), redsync.SetExpiry(15*time.Second), redsync.SetTries(1))
 		for {
 			if err = mutex.Lock(); err != nil {
 				log.WithError(err).WithField("gid", g.ID).Warn("Player: Fulfill: Couldn't aquire lock")
@@ -200,10 +209,27 @@ func (p *Player) Fulfill(g *discordgo.Guild) {
 		}
 		log.WithField("gid", g.ID).Info("Player: Fulfill: Lock claimed")
 
-		// Spawn a player goroutine to handle the rest
-		go p.Play(g, mutex)
+		// Spawn a player goroutine to handle the rest.
+		ctx, cancel := context.WithCancel(context.Background())
+		p.vcMutex.Lock()
+		p.vcCancels[g.ID] = cancel
+		p.vcMutex.Unlock()
+		go p.Play(ctx, g, mutex)
 	}
 }
 
-func (p *Player) Play(g *discordgo.Guild, mutex *redsync.Mutex) {
+func (p *Player) Play(ctx context.Context, g *discordgo.Guild, mutex *redsync.Mutex) {
+	extendTicker := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			mutex.Unlock()
+			return
+		case <-extendTicker.C:
+			if !mutex.Extend() {
+				log.Error("Player: Play: Failed to extend mutex!")
+				return
+			}
+		}
+	}
 }
