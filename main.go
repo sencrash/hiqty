@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -90,8 +91,9 @@ func actionRun(cc *cli.Context) error {
 
 	// Wait for a signal before exiting.
 	quit := make(chan os.Signal)
-	signal.Notify(quit)
-	<-quit
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+	sig := <-quit
+	log.WithField("sig", sig).Info("Signal")
 	signal.Reset()
 
 	// Shut down subsystems, wait for them to finish.
