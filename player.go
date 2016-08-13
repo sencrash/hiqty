@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
 	"golang.org/x/net/context"
 	"gopkg.in/redsync.v1"
+	"io"
+	"os/exec"
 	"sync"
 	"time"
 )
@@ -71,6 +75,9 @@ func (p *Player) Run(ctx context.Context) {
 	p.isShuttingDown = true
 
 	// Wait for all currently playing tracks to finish playing.
+	if len(p.vcCancels) > 0 {
+		log.WithField("num", len(p.vcCancels)).Info("Player: Waiting for tracks to finish...")
+	}
 	p.vcWaitGroup.Wait()
 }
 
@@ -218,12 +225,16 @@ func (p *Player) Fulfill(g *discordgo.Guild) {
 		p.vcMutex.Unlock()
 
 		go func() {
+			p.vcWaitGroup.Add(1)
+
 			p.Play(ctx, g, mutex)
 			mutex.Unlock()
 
 			p.vcMutex.Lock()
 			delete(p.vcCancels, g.ID)
 			p.vcMutex.Unlock()
+
+			p.vcWaitGroup.Done()
 		}()
 	}
 }
@@ -245,8 +256,12 @@ func (p *Player) Play(ctx context.Context, g *discordgo.Guild, mutex *redsync.Mu
 		log.WithError(err).WithFields(log.Fields{"gid": g.ID, "cid": cid}).Error("Player: Play: Couldn't join channel")
 		return
 	}
-	defer vc.Disconnect()
+	defer func() {
+		log.WithField("gid", g.ID).Info("Player: Play: Voice Disconnecting")
+		vc.Disconnect()
+	}()
 
+	playError := make(chan error, 1)
 	for {
 		var currentTrack Track
 		for {
@@ -274,8 +289,24 @@ func (p *Player) Play(ctx context.Context, g *discordgo.Guild, mutex *redsync.Mu
 
 		log.WithField("title", currentTrack.Title).Info("Decoded track")
 
+		go func() { playError <- p.PlayTrack(ctx, vc, currentTrack) }()
+	innerLoop:
 		for {
 			select {
+			case err := <-playError:
+				if err != nil {
+					log.WithError(err).WithFields(log.Fields{
+						"gid":   g.ID,
+						"cid":   cid,
+						"title": currentTrack.Title,
+						"url":   currentTrack.URL,
+					}).Error("Player: Play: Playback error")
+				}
+				if _, err := rconn.Do("LPOP", KeyForServerPlaylist(g.ID)); err != nil {
+					log.WithError(err).WithField("gid", g.ID).Error("Player: Play: Couldn't pop completed track")
+				}
+				log.WithField("gid", g.ID).Info("Track done")
+				break innerLoop
 			case <-ctx.Done():
 				return
 			case <-extendTicker.C:
@@ -286,4 +317,92 @@ func (p *Player) Play(ctx context.Context, g *discordgo.Guild, mutex *redsync.Mu
 			}
 		}
 	}
+}
+
+// PlayTrack plays a music track on a voice channel.
+// TODO: Don't subprocess ytdl! It's only there to test that the rest works before it's replaced.
+// Large chunks of this are straight-up copypaste from iopred's bruxism; this, too, is temporary.
+func (p *Player) PlayTrack(ctx context.Context, vc *discordgo.VoiceConnection, t Track) error {
+	ytdl := exec.Command("youtube-dl", "-v", "-f", "bestaudio", "-o", "-", t.URL)
+	ytdlout, err := ytdl.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	ytdlbuf := bufio.NewReaderSize(ytdlout, 16384)
+
+	ffmpeg := exec.Command("ffmpeg", "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "-ac", "2", "pipe:1")
+	ffmpeg.Stdin = ytdlbuf
+	ffmpegout, err := ffmpeg.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	ffmpegbuf := bufio.NewReaderSize(ffmpegout, 16384)
+
+	dca := exec.Command("dca", "-raw", "-i", "pipe:0")
+	dca.Stdin = ffmpegbuf
+	dcaout, err := dca.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	dcabuf := bufio.NewReaderSize(dcaout, 16384)
+
+	err = ytdl.Start()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		go ytdl.Wait()
+	}()
+
+	err = ffmpeg.Start()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		go ffmpeg.Wait()
+	}()
+
+	err = dca.Start()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		go dca.Wait()
+	}()
+
+	log.Info("Speaking up")
+	if err := vc.Speaking(true); err != nil {
+		return err
+	}
+	defer func() {
+		log.Info("Shutting up")
+		vc.Speaking(false)
+	}()
+
+	time.Sleep(5 * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		var length int16
+		if err := binary.Read(dcabuf, binary.LittleEndian, &length); err != nil {
+			// An EOF just means the song is done, nothing strange here
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		pkt := make([]byte, length)
+		if err := binary.Read(dcabuf, binary.LittleEndian, &pkt); err != nil {
+			return err
+		}
+		vc.OpusSend <- pkt
+	}
+
+	return nil
 }
