@@ -52,14 +52,15 @@ func (p *Player) HandleGuildCreate(_ *discordgo.Session, g *discordgo.GuildCreat
 	p.stateWatchMutex.Lock()
 	defer p.stateWatchMutex.Unlock()
 
-	p.stateWatchPS.Subscribe(KeyForServerState(g.ID))
+	p.stateWatchPS.Subscribe(TopicForKeyspaceEvent(0, KeyForServerState(g.ID)))
 }
 
 // HandleGuildDelete handles guild deletion events. This is also sent when the bot is ejected from
 // a server for any reason, so here's the place to really purge it.
 func (p *Player) HandleGuildDelete(_ *discordgo.Session, g *discordgo.GuildDelete) {
+	// Unsubscribe from events for it
 	p.stateWatchMutex.Lock()
-	p.stateWatchPS.Unsubscribe(KeyForServerState(g.ID))
+	p.stateWatchPS.Unsubscribe(TopicForKeyspaceEvent(0, KeyForServerState(g.ID)))
 	p.stateWatchMutex.Unlock()
 
 	rconn := p.Pool.Get()

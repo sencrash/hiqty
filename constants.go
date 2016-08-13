@@ -19,3 +19,8 @@ func KeyForServerState(gid string) string { return KeyForServer(gid, "state") }
 
 // KeyForServerPlayerLock returns the redis key for a server's player lock.
 func KeyForServerPlayerLock(gid string) string { return KeyForServer(gid, "player_lock") }
+
+// TopicForKeyspaceEvent returns the topic for keyspace events on the given key.
+func TopicForKeyspaceEvent(db int, key string) string {
+	return fmt.Sprintf("__keyspace@%d__:%s", db, key)
+}
