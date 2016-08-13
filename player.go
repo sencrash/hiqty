@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
@@ -211,24 +212,60 @@ func (p *Player) Fulfill(g *discordgo.Guild) {
 
 		// Spawn a player goroutine to handle the rest.
 		ctx, cancel := context.WithCancel(context.Background())
+
 		p.vcMutex.Lock()
 		p.vcCancels[g.ID] = cancel
 		p.vcMutex.Unlock()
-		go p.Play(ctx, g, mutex)
+
+		go func() {
+			p.Play(ctx, g, mutex)
+			mutex.Unlock()
+
+			p.vcMutex.Lock()
+			delete(p.vcCancels, g.ID)
+			p.vcMutex.Unlock()
+		}()
 	}
 }
 
 func (p *Player) Play(ctx context.Context, g *discordgo.Guild, mutex *redsync.Mutex) {
+	rconn := p.Pool.Get()
+	defer rconn.Close()
+
 	extendTicker := time.NewTicker(10 * time.Second)
 	for {
-		select {
-		case <-ctx.Done():
-			mutex.Unlock()
-			return
-		case <-extendTicker.C:
-			if !mutex.Extend() {
-				log.Error("Player: Play: Failed to extend mutex!")
+		var currentTrack Track
+		for {
+			bytes, err := redis.ByteSlices(rconn.Do("LRANGE", KeyForServerPlaylist(g.ID), 0, 1))
+			if err != nil {
+				log.WithError(err).WithField("gid", g.ID).Error("Player: Play: Couldn't get last track!")
 				return
+			}
+			if len(bytes) == 0 {
+				log.WithField("gid", g.ID).Info("Player: Play: Playlist is empty!")
+				if _, err := rconn.Do("DEL", KeyForServerState(g.ID)); err != nil {
+					log.WithError(err).WithField("gid", g.ID).Error("Player: Play: Couldn't delete state marker")
+				}
+				return
+			}
+			if err := json.Unmarshal(bytes[0], &currentTrack); err != nil {
+				log.WithError(err).WithField("gid", g.ID).Error("Player: Play: Discarding malformed track")
+				continue
+			}
+			break
+		}
+
+		log.WithField("title", currentTrack.Title).Info("Decoded track")
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-extendTicker.C:
+				if !mutex.Extend() {
+					log.WithField("gid", g.ID).Error("Player: Play: Failed to extend mutex!")
+					return
+				}
 			}
 		}
 	}
