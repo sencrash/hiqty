@@ -80,6 +80,35 @@ func actionRun(cc *cli.Context) error {
 	return nil
 }
 
+func actionInfo(cc *cli.Context) error {
+	token := cc.String("token")
+	if token == "" {
+		return cli.Exit("Missing bot token", 1)
+	}
+
+	session, err := discordgo.New(token)
+	if err != nil {
+		return cli.Exit(err.Error(), 1)
+	}
+
+	u, err := session.User("@me")
+	if err != nil {
+		return cli.Exit(err.Error(), 1)
+	}
+
+	app, err := session.Application("@me")
+	if err != nil {
+		return cli.Exit(err.Error(), 1)
+	}
+
+	fmt.Printf("Authorized as: %s#%s (bot: %v)\n", u.Username, u.Discriminator, u.Bot)
+	fmt.Printf("Application: %s (%s)\n", app.Name, app.ID)
+	fmt.Printf("\n")
+	fmt.Printf("Invite link:\n")
+	fmt.Printf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=%d\n", app.ID, RequiredPermissions)
+	return nil
+}
+
 func main() {
 	app := cli.App{}
 	app.Name = "hiqty"
@@ -90,6 +119,19 @@ func main() {
 			Name:   "run",
 			Usage:  "Runs the bot interface + player",
 			Action: actionRun,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    "token",
+					Aliases: []string{"t"},
+					Usage:   "Discord token",
+					EnvVars: []string{"HIQTY_BOT_TOKEN"},
+				},
+			},
+		},
+		&cli.Command{
+			Name:   "info",
+			Usage:  "Prints bot information and invite link",
+			Action: actionInfo,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:    "token",
