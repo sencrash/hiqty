@@ -6,6 +6,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
 	"github.com/joho/godotenv"
+	"github.com/uppfinnarn/hiqty/media"
 	"golang.org/x/net/context"
 	"gopkg.in/urfave/cli.v2"
 	"os"
@@ -127,6 +128,22 @@ func actionInfo(cc *cli.Context) error {
 	fmt.Printf("Authorized as: %s#%s (bot: %v)\n", u.Username, u.Discriminator, u.Bot)
 	fmt.Printf("Application: %s (%s)\n", app.Name, app.ID)
 	fmt.Printf("\n")
+
+	fmt.Printf("Backends:\n")
+	for key, fact := range media.Services {
+		if !fact.IsAvailable() {
+			fmt.Printf(" -   %s\n", key)
+			continue
+		}
+		_, err := fact.New()
+		if err != nil {
+			fmt.Printf("ERR  %s (%s)\n", key, err.Error())
+			continue
+		}
+		fmt.Printf("OK   %s\n", key)
+	}
+	fmt.Printf("\n")
+
 	fmt.Printf("Invite link:\n")
 	fmt.Printf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=%d\n", app.ID, RequiredPermissions)
 	return nil
