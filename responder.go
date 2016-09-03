@@ -25,10 +25,8 @@ type Responder struct {
 // it to outlive the responder - there may still be unfinished songs playing.
 func (r *Responder) Run(ctx context.Context) {
 	// Registering a handler returns a function that unregisters it.
-	deregReady := r.Session.AddHandler(r.HandleReady)
-	defer deregReady()
-	deregMessageCreate := r.Session.AddHandler(r.HandleMessageCreate)
-	defer deregMessageCreate()
+	defer r.Session.AddHandler(r.HandleReady)()
+	defer r.Session.AddHandler(r.HandleMessageCreate)()
 
 	// Wait for the context to terminate.
 	<-ctx.Done()
