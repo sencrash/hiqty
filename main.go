@@ -75,12 +75,17 @@ func actionRun(cc *cli.Context) error {
 		wg.Done()
 	}()
 
-	player := NewPlayer(session, pool)
+	playerController := PlayerController{
+		Session: session,
+		Pool:    pool,
+	}
 	wg.Add(1)
 	go func() {
-		log.Info("Player: Initializing")
-		player.Run(ctx)
-		log.Info("Player: Terminated")
+		log.Info("PlayerController: Initializing")
+		playerController.Run(ctx)
+		log.Info("PlayerController: Waiting for players...")
+		playerController.Wait()
+		log.Info("PlayerController: Terminated")
 		wg.Done()
 	}()
 
