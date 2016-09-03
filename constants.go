@@ -34,6 +34,15 @@ func TopicForKeyspaceEvent(db int, key string) string {
 	return fmt.Sprintf("__keyspace@%d__:%s", db, key)
 }
 
+// KeyFromKeyspaceTopic returns the key for a keyspace event topic.
+func KeyFromKeyspaceTopic(s string) string {
+	colonPos := strings.IndexRune(s, ':')
+	if colonPos == -1 {
+		return ""
+	}
+	return s[colonPos+1:]
+}
+
 // GIDFromKey returns the concerned GID from a redis key.
 func GIDFromKey(key string) string {
 	return strings.Split(key, ":")[2]

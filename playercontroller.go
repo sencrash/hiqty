@@ -17,9 +17,11 @@ type PlayerController struct {
 	Pool    *redis.Pool
 
 	redsync *redsync.Redsync
+	cancels map[string]context.CancelFunc
+	mutex   sync.Mutex
 	wg      sync.WaitGroup
 
-	stateWatchPS    redis.PubSubConn
+	stateWatch      Watcher
 	stateWatchMutex sync.Mutex
 }
 
@@ -27,24 +29,26 @@ type PlayerController struct {
 // players will finish playing their current tracks before terminating. Use Wait to wait for this.
 func (c *PlayerController) Run(ctx context.Context) {
 	c.redsync = redsync.New([]redsync.Pool{c.Pool})
+	c.cancels = make(map[string]context.CancelFunc)
 
 	// Add event handlers.
 	defer c.Session.AddHandler(c.HandleGuildCreate)()
 
 	// Watch for keyspace notifications.
-	keyWatchConn := c.Pool.Get()
-	_, err := keyWatchConn.Do("CONFIG", "SET", "notify-keyspace-events", "AKE")
+	stateWatchConn := c.Pool.Get()
+	_, err := stateWatchConn.Do("CONFIG", "SET", "notify-keyspace-events", "AKE")
 	if err != nil {
 		log.WithError(err).Error("Player: Couldn't enable keyspace events; state watching will not work!")
 		return
 	}
-	c.stateWatchPS = redis.PubSubConn{Conn: keyWatchConn}
+	c.stateWatch = Watcher{redis.PubSubConn{stateWatchConn}}
 
-	gids := c.readGIDsForStateEvents(ctx)
+	keys := c.stateWatch.Run(ctx)
 loop:
 	for {
 		select {
-		case gid := <-gids:
+		case key := <-keys:
+			gid := GIDFromKey(key)
 			log.WithField("gid", gid).Info("State event")
 			c.Fulfill(gid)
 		case <-ctx.Done():
@@ -61,44 +65,15 @@ func (c *PlayerController) Wait() {
 // HandleGuildCreate subscribes to state changes when the bot joins a guild.
 func (c *PlayerController) HandleGuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) {
 	c.stateWatchMutex.Lock()
-	c.stateWatchPS.Subscribe(TopicForKeyspaceEvent(0, KeyForServerState(g.ID)))
+	c.stateWatch.Subscribe(0, KeyForServerState(g.ID))
 	c.stateWatchMutex.Unlock()
 }
 
 // HandleGuildDelete unsubscribes from state changes when the bot is kicked from a guild.
 func (c *PlayerController) HandleGuildDelete(_ *discordgo.Session, g *discordgo.GuildDelete) {
 	c.stateWatchMutex.Lock()
-	c.stateWatchPS.Unsubscribe(TopicForKeyspaceEvent(0, KeyForServerState(g.ID)))
+	c.stateWatch.Unsubscribe(0, KeyForServerState(g.ID))
 	c.stateWatchMutex.Unlock()
-}
-
-// ReadGIDsForStateEvents returns a pipeline of GIDs for state keyspace events.
-func (c *PlayerController) readGIDsForStateEvents(ctx context.Context) <-chan string {
-	ch := make(chan string)
-
-	go func() {
-		defer close(ch)
-
-		for {
-			switch v := c.stateWatchPS.Receive().(type) {
-			case redis.Subscription:
-				gid := GIDFromKeyspaceEventTopic(v.Channel)
-				ch <- gid
-			case redis.Message:
-				gid := GIDFromKeyspaceEventTopic(v.Channel)
-				ch <- gid
-			case error:
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					log.WithError(v).Error("PlayerController: Couldn't receive state events")
-				}
-			}
-		}
-	}()
-
-	return ch
 }
 
 // Fulfill ensures that the current state of the given guild matches the desired state.
