@@ -1,13 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
 	"github.com/joho/godotenv"
 	"github.com/uppfinnarn/hiqty/media"
-	"golang.org/x/net/context"
 	"gopkg.in/urfave/cli.v2"
 	"os"
 	"os/signal"

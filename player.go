@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
-	"golang.org/x/net/context"
 	"gopkg.in/redsync.v1"
 	"io"
 	"os/exec"

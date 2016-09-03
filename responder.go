@@ -1,12 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
 	"github.com/mvdan/xurls"
-	"golang.org/x/net/context"
 	"strings"
 )
 
