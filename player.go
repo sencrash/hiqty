@@ -19,13 +19,18 @@ type Player struct {
 
 // Run runs the Player. The context expiring will not immediately terminate the player - rather, it
 // will terminate after the current song finishes playing.
-func (p *Player) Run(ctx context.Context) {
+func (p *Player) Run(ctx context.Context, stop <-chan interface{}) {
 	ticker := time.NewTicker(2 * time.Second)
 
 loop:
 	for {
-		<-ticker.C
-		log.WithField("gid", p.GuildID).Info("Tick!")
+		select {
+		case <-ticker.C:
+			log.WithField("gid", p.GuildID).Info("Tick!")
+		case <-stop:
+			log.WithField("gid", p.GuildID).Info("Stopped")
+			break loop
+		}
 
 		select {
 		case <-ctx.Done():

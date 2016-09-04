@@ -17,7 +17,7 @@ type PlayerController struct {
 	Pool    *redis.Pool
 
 	redsync *redsync.Redsync
-	cancels map[string]context.CancelFunc
+	stop    map[string]chan interface{}
 	mutex   sync.Mutex
 	wg      sync.WaitGroup
 
@@ -29,7 +29,7 @@ type PlayerController struct {
 // existing players will finish playing their current tracks before terminating.
 func (c *PlayerController) Run(ctx context.Context) {
 	c.redsync = redsync.New([]redsync.Pool{c.Pool})
-	c.cancels = make(map[string]context.CancelFunc)
+	c.stop = make(map[string]chan interface{})
 
 	// Add event handlers.
 	defer c.Session.AddHandler(c.HandleGuildCreate)()
@@ -90,26 +90,27 @@ func (c *PlayerController) Fulfill(ctx context.Context, gid string) {
 		log.WithField("gid", gid).Info("PlayerController: State is stopped")
 
 		c.mutex.Lock()
-		if cancel := c.cancels[gid]; cancel != nil {
-			cancel()
+		if stop := c.stop[gid]; stop != nil {
+			close(stop)
+			delete(c.stop, gid)
 		}
 		c.mutex.Unlock()
 	case StatePlaying:
 		log.WithField("gid", gid).Info("PlayerController: State is playing")
 
 		player := Player{Session: c.Session, Pool: c.Pool, GuildID: gid}
-		ctx, cancel := context.WithCancel(ctx)
+		stop := make(chan interface{})
 
 		c.mutex.Lock()
-		c.cancels[gid] = cancel
+		c.stop[gid] = stop
 		c.mutex.Unlock()
 
 		c.wg.Add(1)
 		go func() {
-			player.Run(ctx)
+			player.Run(ctx, stop)
 
 			c.mutex.Lock()
-			delete(c.cancels, gid)
+			delete(c.stop, gid)
 			c.mutex.Unlock()
 
 			c.wg.Done()
