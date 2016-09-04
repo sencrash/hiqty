@@ -83,8 +83,6 @@ func actionRun(cc *cli.Context) error {
 	go func() {
 		log.Info("PlayerController: Initializing")
 		playerController.Run(ctx)
-		log.Info("PlayerController: Waiting for players...")
-		playerController.Wait()
 		log.Info("PlayerController: Terminated")
 		wg.Done()
 	}()

@@ -25,8 +25,8 @@ type PlayerController struct {
 	stateWatchMutex sync.Mutex
 }
 
-// Run runs the player controller. When the request ends, no more players will spawn, and existing
-// players will finish playing their current tracks before terminating. Use Wait to wait for this.
+// Run runs the player controller. When the context expires, no more players will spawn, and
+// existing players will finish playing their current tracks before terminating.
 func (c *PlayerController) Run(ctx context.Context) {
 	c.redsync = redsync.New([]redsync.Pool{c.Pool})
 	c.cancels = make(map[string]context.CancelFunc)
@@ -50,15 +50,13 @@ loop:
 		case key := <-keys:
 			gid := GIDFromKey(key)
 			log.WithField("gid", gid).Info("State event")
-			c.Fulfill(gid)
+			c.Fulfill(ctx, gid)
 		case <-ctx.Done():
 			break loop
 		}
 	}
-}
 
-// Wait waits for all running players to finish before returning.
-func (c *PlayerController) Wait() {
+	log.Info("PlayerController: Waiting for players to finish...")
 	c.wg.Wait()
 }
 
@@ -77,7 +75,7 @@ func (c *PlayerController) HandleGuildDelete(_ *discordgo.Session, g *discordgo.
 }
 
 // Fulfill ensures that the current state of the given guild matches the desired state.
-func (c *PlayerController) Fulfill(gid string) {
+func (c *PlayerController) Fulfill(ctx context.Context, gid string) {
 	rconn := c.Pool.Get()
 	defer rconn.Close()
 
@@ -90,7 +88,31 @@ func (c *PlayerController) Fulfill(gid string) {
 	switch state {
 	case StateStopped, "":
 		log.WithField("gid", gid).Info("PlayerController: State is stopped")
+
+		c.mutex.Lock()
+		if cancel := c.cancels[gid]; cancel != nil {
+			cancel()
+		}
+		c.mutex.Unlock()
 	case StatePlaying:
 		log.WithField("gid", gid).Info("PlayerController: State is playing")
+
+		player := Player{Session: c.Session, Pool: c.Pool, GuildID: gid}
+		ctx, cancel := context.WithCancel(ctx)
+
+		c.mutex.Lock()
+		c.cancels[gid] = cancel
+		c.mutex.Unlock()
+
+		c.wg.Add(1)
+		go func() {
+			player.Run(ctx)
+
+			c.mutex.Lock()
+			delete(c.cancels, gid)
+			c.mutex.Unlock()
+
+			c.wg.Done()
+		}()
 	}
 }
