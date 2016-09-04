@@ -98,6 +98,12 @@ func (c *PlayerController) Fulfill(ctx context.Context, gid string) {
 	case StatePlaying:
 		log.WithField("gid", gid).Info("PlayerController: State is playing")
 
+		select {
+		case <-ctx.Done():
+			log.WithField("gid", gid).Info("PlayerController: Not spawning player off expired context")
+		default:
+		}
+
 		player := Player{Session: c.Session, Pool: c.Pool, GuildID: gid}
 		stop := make(chan interface{})
 
