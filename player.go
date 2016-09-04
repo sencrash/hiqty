@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// A Player plays music in a server. It watches the playlist and adjusts to changes on its own, but
+// watching server state and launching/terminating players is the PlayerController's job.
 type Player struct {
 	Session *discordgo.Session
 	Pool    *redis.Pool
@@ -15,6 +17,8 @@ type Player struct {
 	GuildID string
 }
 
+// Run runs the Player. The context expiring will not immediately terminate the player - rather, it
+// will terminate after the current song finishes playing.
 func (p *Player) Run(ctx context.Context) {
 	ticker := time.NewTicker(2 * time.Second)
 
