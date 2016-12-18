@@ -22,4 +22,7 @@ type Service interface {
 
 	// Resolve is called if Sniff() returns true, and resolves a URL into one or more tracks.
 	Resolve(u *url.URL) ([]Track, error)
+
+	// Returns a blank track. Used to unmarshal tracks from envelopes.
+	NewTrack() Track
 }

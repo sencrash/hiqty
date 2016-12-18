@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
@@ -66,6 +67,29 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 		return
 	}
 
+	// Get extended info on the guild.
+	guild, err := r.Session.State.Guild(channel.GuildID)
+	if err != nil {
+		guild, err = r.Session.Guild(channel.GuildID)
+		if err != nil {
+			log.WithError(err).Error("Couldn't get guild info")
+			return
+		}
+	}
+
+	// We need a voice state to be able to follow the poster into voice channels.
+	var voiceState *discordgo.VoiceState
+	for _, vs := range guild.VoiceStates {
+		if vs.UserID != msg.Author.ID {
+			continue
+		}
+		voiceState = vs
+	}
+	if voiceState == nil {
+		r.Session.ChannelMessageSend(msg.ChannelID, fmt.Sprintf("<@!%s> You must be in a voice channel to request tracks.", msg.Author.ID))
+		return
+	}
+
 	// Find all URLs in the message.
 	urls := xurls.Strict.FindAllString(msg.Content, -1)
 	tracks := []media.Track{}
@@ -99,7 +123,50 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 		return
 	}
 
-	// Report and enqueue any found tracks.
+	// Update Redis state.
+	rconn := r.Pool.Get()
+	defer rconn.Close()
+
+	stateKey := KeyForServerState(channel.GuildID)
+	channelKey := KeyForServerChannel(channel.GuildID)
+	playlistKey := KeyForServerPlaylist(channel.GuildID)
+
+	// Push tracks onto the playlist.
+	for _, track := range tracks {
+		// Skip unplayable tracks.
+		if ok, _ := track.GetPlayable(); !ok {
+			continue
+		}
+
+		// Wrap tracks in envelopes designating which service they belong to.
+		trackdata, err := json.Marshal(track)
+		if err != nil {
+			log.WithError(err).Error("Couldn't marshal track")
+			return
+		}
+		data, err := json.Marshal(TrackEnvelope{track.GetServiceID(), trackdata})
+		if err != nil {
+			log.WithError(err).Error("Couldn't marshal envelope")
+			return
+		}
+
+		// Push the track onto the playlist.
+		if _, err := rconn.Do("RPUSH", playlistKey, data); err != nil {
+			log.WithError(err).Error("Couldn't push to playlist")
+		}
+	}
+
+	// Set the bot's active voice channel.
+	if _, err := rconn.Do("SET", channelKey, voiceState.ChannelID); err != nil {
+		log.WithError(err).Error("Couldn't set active channel")
+	}
+
+	// Set the bot's player state.
+	if _, err := rconn.Do("SET", stateKey, StatePlaying); err != nil {
+		log.WithError(err).Error("Couldn't set player state")
+	}
+
+	// Visually report queued tracks.
 	for _, track := range tracks {
 		info := track.GetInfo()
 		embed := &discordgo.MessageEmbed{

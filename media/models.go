@@ -31,6 +31,7 @@ func (s *ServiceRef) UnmarshalJSON(data []byte) error {
 
 // A Track represents a single track.
 type Track interface {
+	GetServiceID() string
 	GetInfo() TrackInfo
 	GetPlayable() (bool, string)
 }

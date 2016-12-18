@@ -65,3 +65,7 @@ func (s *Service) Resolve(u *url.URL) ([]media.Track, error) {
 		return nil, errors.New("unknown envelope type: " + env.Kind)
 	}
 }
+
+func (s *Service) NewTrack() media.Track {
+	return Track{}
+}

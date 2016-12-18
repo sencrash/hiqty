@@ -35,6 +35,10 @@ type Track struct {
 	StreamURL    string `json:"stream_url"`
 }
 
+func (t Track) GetServiceID() string {
+	return "soundcloud"
+}
+
 func (t Track) GetInfo() media.TrackInfo {
 	// Mimic SoundCloud's behavior of showing the user's avatar in lieau of cover art.
 	coverURL := t.ArtworkURL
