@@ -8,6 +8,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/joho/godotenv"
 	"github.com/uppfinnarn/hiqty/media"
+	"github.com/uppfinnarn/hiqty/media/soundcloud"
 	"gopkg.in/urfave/cli.v2"
 	"os"
 	"os/signal"
@@ -15,6 +16,23 @@ import (
 	"syscall"
 	"time"
 )
+
+func populateServices(cc *cli.Context) error {
+	// SoundCloud
+	{
+		clientID := cc.String("soundcloud-client-id")
+		if clientID != "" {
+			media.Register(soundcloud.New(
+				cc.String("soundcloud-client-id"),
+			))
+			log.Info("Service Registered: soundcloud")
+		} else {
+			log.Warn("Service Unavailable: soundcloud")
+		}
+	}
+
+	return nil
+}
 
 func actionRun(cc *cli.Context) error {
 	token := cc.String("token")
@@ -153,6 +171,11 @@ func main() {
 			Usage:   "Redis address",
 			EnvVars: []string{"HIQTY_REDIS"},
 			Value:   "127.0.0.1:6379",
+		},
+		&cli.StringFlag{
+			Name:    "soundcloud-client-id",
+			Usage:   "Soundcloud Client ID",
+			EnvVars: []string{"SOUNDCLOUD_CLIENT_ID"},
 		},
 	}
 	app.Commands = []*cli.Command{
