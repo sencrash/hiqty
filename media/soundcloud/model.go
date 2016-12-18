@@ -66,6 +66,11 @@ func (t Track) GetPlayable() (bool, string) {
 	return true, ""
 }
 
+func (t Track) Equals(other media.Track) bool {
+	t2, ok := other.(Track)
+	return ok && t.ID == t2.ID
+}
+
 type Playlist struct {
 	ID          int64   `json:"id"`
 	Title       string  `json:"title"`

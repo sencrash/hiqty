@@ -34,6 +34,8 @@ type Track interface {
 	GetServiceID() string
 	GetInfo() TrackInfo
 	GetPlayable() (bool, string)
+
+	Equals(Track) bool
 }
 
 type TrackUserInfo struct {
