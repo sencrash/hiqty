@@ -7,6 +7,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/garyburd/redigo/redis"
 	"github.com/mvdan/xurls"
+	"github.com/uppfinnarn/hiqty/media"
+	neturl "net/url"
 	"strings"
 )
 
@@ -66,7 +68,59 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 
 	// Find all URLs in the message.
 	urls := xurls.Strict.FindAllString(msg.Content, -1)
+	tracks := []media.Track{}
 	for _, url := range urls {
-		log.WithField("url", url).Info("Looks like a URL!")
+		u, err := neturl.Parse(url)
+		if err != nil {
+			log.WithError(err).WithField("url", url).Error("Couldn't parse URL?")
+			continue
+		}
+
+		for sid, svc := range media.Services {
+			if !svc.Sniff(u) {
+				continue
+			}
+
+			log.WithFields(log.Fields{"service": sid, "url": url}).Debug("Smell test passed")
+			ts, err := svc.Resolve(u)
+			if err != nil {
+				log.WithError(err).Error("Couldn't resolve track")
+				r.Session.ChannelMessageSend(msg.ChannelID, fmt.Sprintf("<@!%s> Error: %s", msg.Author.ID, err.Error()))
+				continue
+			}
+
+			for _, track := range ts {
+				tracks = append(tracks, track)
+			}
+			break
+		}
+	}
+	if len(tracks) == 0 {
+		return
+	}
+
+	// Report and enqueue any found tracks.
+	for _, track := range tracks {
+		info := track.GetInfo()
+		embed := &discordgo.MessageEmbed{
+			Color:       0x99ff99,
+			Title:       info.Title,
+			URL:         info.URL,
+			Description: info.Description,
+			Author: &discordgo.MessageEmbedAuthor{
+				Name:    info.User.Name,
+				URL:     info.User.URL,
+				IconURL: info.User.AvatarURL,
+			},
+			Thumbnail: &discordgo.MessageEmbedThumbnail{URL: info.CoverURL},
+		}
+
+		playable, reason := track.GetPlayable()
+		if !playable {
+			embed.Color = 0xff3333
+			embed.Footer = &discordgo.MessageEmbedFooter{Text: reason}
+		}
+
+		r.Session.ChannelMessageSendEmbed(msg.ChannelID, embed)
 	}
 }

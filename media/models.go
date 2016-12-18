@@ -30,11 +30,21 @@ func (s *ServiceRef) UnmarshalJSON(data []byte) error {
 }
 
 // A Track represents a single track.
-type Track struct {
-	ID      string
-	Service ServiceRef
+type Track interface {
+	GetInfo() TrackInfo
+	GetPlayable() (bool, string)
+}
 
+type TrackUserInfo struct {
+	Name      string
+	URL       string
+	AvatarURL string
+}
+
+type TrackInfo struct {
 	Title       string
-	Author      string
 	Description string
+	URL         string
+	CoverURL    string
+	User        TrackUserInfo
 }

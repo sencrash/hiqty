@@ -1,5 +1,9 @@
 package soundcloud
 
+import (
+	"github.com/uppfinnarn/hiqty/media"
+)
+
 const (
 	UserKind     = "user"
 	TrackKind    = "track"
@@ -13,6 +17,9 @@ type BlankEnvelope struct {
 type User struct {
 	ID       int64  `json:"user"`
 	Username string `json:"username"`
+
+	PermalinkURL string `json:"permalink_url"`
+	AvatarURL    string `json:"avatar_url"`
 }
 
 type Track struct {
@@ -20,6 +27,39 @@ type Track struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	User        User   `json:"user"`
+
+	Streamable bool `json:"streamable"`
+
+	PermalinkURL string `json:"permalink_url"`
+	ArtworkURL   string `json:"artwork_url"`
+	StreamURL    string `json:"stream_url"`
+}
+
+func (t Track) GetInfo() media.TrackInfo {
+	// Mimic SoundCloud's behavior of showing the user's avatar in lieau of cover art.
+	coverURL := t.ArtworkURL
+	if coverURL == "" {
+		coverURL = t.User.AvatarURL
+	}
+
+	return media.TrackInfo{
+		Title:       t.Title,
+		Description: t.Description,
+		URL:         t.PermalinkURL,
+		CoverURL:    coverURL,
+		User: media.TrackUserInfo{
+			Name:      t.User.Username,
+			URL:       t.User.PermalinkURL,
+			AvatarURL: t.User.AvatarURL,
+		},
+	}
+}
+
+func (t Track) GetPlayable() (bool, string) {
+	if !t.Streamable {
+		return false, "The artist has disabled streaming for this track."
+	}
+	return true, ""
 }
 
 type Playlist struct {

@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strconv"
 )
 
 type Service struct {
@@ -50,7 +49,7 @@ func (s *Service) Resolve(u *url.URL) ([]media.Track, error) {
 		if err := json.Unmarshal(data, &track); err != nil {
 			return nil, err
 		}
-		return []media.Track{s.makeTrack(track)}, nil
+		return []media.Track{media.Track(track)}, nil
 	case PlaylistKind:
 		var list Playlist
 		if err := json.Unmarshal(data, &list); err != nil {
@@ -59,20 +58,10 @@ func (s *Service) Resolve(u *url.URL) ([]media.Track, error) {
 
 		tracks := make([]media.Track, len(list.Tracks))
 		for i, track := range list.Tracks {
-			tracks[i] = s.makeTrack(track)
+			tracks[i] = media.Track(track)
 		}
 		return tracks, nil
 	default:
 		return nil, errors.New("unknown envelope type: " + env.Kind)
-	}
-}
-
-func (s *Service) makeTrack(tr Track) media.Track {
-	return media.Track{
-		ID:          strconv.FormatInt(tr.ID, 10),
-		Service:     media.ServiceRef{s},
-		Title:       tr.Title,
-		Author:      tr.User.Username,
-		Description: tr.Description,
 	}
 }

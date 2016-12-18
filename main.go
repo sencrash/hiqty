@@ -217,6 +217,10 @@ func main() {
 			log.SetLevel(log.DebugLevel)
 		}
 
+		if err := populateServices(cc); err != nil {
+			return err
+		}
+
 		return nil
 	}
 	if app.Run(os.Args) != nil {
