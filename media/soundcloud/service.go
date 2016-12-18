@@ -25,6 +25,16 @@ func (s *Service) ID() string {
 	return "soundcloud"
 }
 
+func (s *Service) Attribution() media.ServiceAttribution {
+	// TODO: Ask SoundCloud if it's okay to use an orange logo!
+	// They explicitly ask for it to be black or white, but we can't tell which one will actually
+	// be visible with the user's chosen theme.
+	return media.ServiceAttribution{
+		Text:    "Powered by SoundCloud",
+		LogoURL: "https://w.soundcloud.com/icon/assets/images/orange_transparent_64-94fc761.png",
+	}
+}
+
 func (s *Service) Sniff(u *url.URL) bool {
 	return (u.Host == "soundcloud.com")
 }

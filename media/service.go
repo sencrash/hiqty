@@ -17,6 +17,9 @@ type Service interface {
 	// An arbitrary ID for the service, used for track serialization.
 	ID() string
 
+	// Attribution info for the service.
+	Attribution() ServiceAttribution
+
 	// Return true if the URL looks interesting.
 	Sniff(u *url.URL) bool
 

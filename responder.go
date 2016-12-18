@@ -169,6 +169,7 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 	// Visually report queued tracks.
 	for _, track := range tracks {
 		info := track.GetInfo()
+		attribution := media.Services[track.GetServiceID()].Attribution()
 		embed := &discordgo.MessageEmbed{
 			Color:       0x99ff99,
 			Title:       info.Title,
@@ -180,12 +181,16 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 				IconURL: info.User.AvatarURL,
 			},
 			Thumbnail: &discordgo.MessageEmbedThumbnail{URL: info.CoverURL},
+			Footer: &discordgo.MessageEmbedFooter{
+				Text:    attribution.Text,
+				IconURL: attribution.LogoURL,
+			},
 		}
 
 		playable, reason := track.GetPlayable()
 		if !playable {
 			embed.Color = 0xff3333
-			embed.Footer = &discordgo.MessageEmbedFooter{Text: reason}
+			embed.Footer = &discordgo.MessageEmbedFooter{Text: "Error: " + reason}
 		}
 
 		r.Session.ChannelMessageSendEmbed(msg.ChannelID, embed)

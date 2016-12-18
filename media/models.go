@@ -49,3 +49,9 @@ type TrackInfo struct {
 	CoverURL    string
 	User        TrackUserInfo
 }
+
+// Describes how to properly attribute the media provider.
+type ServiceAttribution struct {
+	Text    string
+	LogoURL string
+}
