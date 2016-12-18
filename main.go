@@ -132,27 +132,16 @@ func actionInfo(cc *cli.Context) error {
 	fmt.Printf("Application: %s (%s)\n", app.Name, app.ID)
 	fmt.Printf("\n")
 
-	fmt.Printf("Backends:\n")
-	for key, fact := range media.Services {
-		if !fact.IsAvailable() {
-			fmt.Printf(" -   %s\n", key)
-			continue
-		}
-		_, err := fact.New()
-		if err != nil {
-			fmt.Printf("ERR  %s (%s)\n", key, err.Error())
-			continue
-		}
-		fmt.Printf("OK   %s\n", key)
-	}
-	fmt.Printf("\n")
-
 	fmt.Printf("Invite link:\n")
 	fmt.Printf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=%d\n", app.ID, RequiredPermissions)
 	return nil
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.WithError(err).Error("Couldn't load .env")
+	}
+
 	app := cli.App{}
 	app.Name = "hiqty"
 	app.Usage = "A high quality Discord music bot"
@@ -193,13 +182,6 @@ func main() {
 				},
 			},
 		},
-	}
-	app.Before = func(cc *cli.Context) error {
-		if err := godotenv.Load(); err != nil {
-			return cli.Exit(err.Error(), 1)
-		}
-
-		return nil
 	}
 	if app.Run(os.Args) != nil {
 		os.Exit(1)
