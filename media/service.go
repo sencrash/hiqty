@@ -1,6 +1,7 @@
 package media
 
 import (
+	"net/http"
 	"net/url"
 )
 
@@ -28,4 +29,7 @@ type Service interface {
 
 	// Returns a blank track. Used to unmarshal tracks from envelopes.
 	NewTrack() Track
+
+	// Builds a request for the track's media file.
+	BuildMediaRequest(t Track) (*http.Request, error)
 }

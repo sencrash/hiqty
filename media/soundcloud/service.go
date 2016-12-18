@@ -79,3 +79,8 @@ func (s *Service) Resolve(u *url.URL) ([]media.Track, error) {
 func (s *Service) NewTrack() media.Track {
 	return Track{}
 }
+
+func (s *Service) BuildMediaRequest(t_ media.Track) (*http.Request, error) {
+	t := t_.(Track)
+	return http.NewRequest("GET", t.StreamURL+"?client_id="+s.ClientID, nil)
+}
