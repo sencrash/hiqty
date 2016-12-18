@@ -165,6 +165,12 @@ func main() {
 	app.Usage = "A high quality Discord music bot"
 	app.HideVersion = true
 	app.Flags = []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "verbose",
+			Aliases: []string{"v"},
+			EnvVars: []string{"HIQTY_VERBOSE"},
+			Usage:   "Log debug messages",
+		},
 		&cli.StringFlag{
 			Name:    "redis",
 			Aliases: []string{"r"},
@@ -205,6 +211,13 @@ func main() {
 				},
 			},
 		},
+	}
+	app.Before = func(cc *cli.Context) error {
+		if cc.Bool("verbose") {
+			log.SetLevel(log.DebugLevel)
+		}
+
+		return nil
 	}
 	if app.Run(os.Args) != nil {
 		os.Exit(1)
