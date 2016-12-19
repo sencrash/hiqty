@@ -139,12 +139,7 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 		}
 
 		// Wrap tracks in envelopes designating which service they belong to.
-		trackdata, err := json.Marshal(track)
-		if err != nil {
-			log.WithError(err).Error("Couldn't marshal track")
-			return
-		}
-		data, err := json.Marshal(TrackEnvelope{track.GetServiceID(), trackdata})
+		data, err := json.Marshal(TrackEnvelope{track.GetServiceID(), track})
 		if err != nil {
 			log.WithError(err).Error("Couldn't marshal envelope")
 			return

@@ -59,7 +59,7 @@ func (s *Service) Resolve(u *url.URL) ([]media.Track, error) {
 		if err := json.Unmarshal(data, &track); err != nil {
 			return nil, err
 		}
-		return []media.Track{media.Track(track)}, nil
+		return []media.Track{media.Track(&track)}, nil
 	case PlaylistKind:
 		var list Playlist
 		if err := json.Unmarshal(data, &list); err != nil {
@@ -68,7 +68,7 @@ func (s *Service) Resolve(u *url.URL) ([]media.Track, error) {
 
 		tracks := make([]media.Track, len(list.Tracks))
 		for i, track := range list.Tracks {
-			tracks[i] = media.Track(track)
+			tracks[i] = media.Track(&track)
 		}
 		return tracks, nil
 	default:
@@ -77,10 +77,10 @@ func (s *Service) Resolve(u *url.URL) ([]media.Track, error) {
 }
 
 func (s *Service) NewTrack() media.Track {
-	return Track{}
+	return &Track{}
 }
 
 func (s *Service) BuildMediaRequest(t_ media.Track) (*http.Request, error) {
-	t := t_.(Track)
+	t := t_.(*Track)
 	return http.NewRequest("GET", t.StreamURL+"?client_id="+s.ClientID, nil)
 }

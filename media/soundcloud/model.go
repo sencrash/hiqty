@@ -35,7 +35,7 @@ type Track struct {
 	StreamURL    string `json:"stream_url"`
 }
 
-func (t Track) GetServiceID() string {
+func (t *Track) GetServiceID() string {
 	return "soundcloud"
 }
 
@@ -67,7 +67,10 @@ func (t Track) GetPlayable() (bool, string) {
 }
 
 func (t Track) Equals(other media.Track) bool {
-	t2, ok := other.(Track)
+	if other == nil {
+		return false
+	}
+	t2, ok := other.(*Track)
 	return ok && t.ID == t2.ID
 }
 
