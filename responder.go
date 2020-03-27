@@ -91,7 +91,7 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 	}
 
 	// Find all URLs in the message.
-	urls := xurls.Strict.FindAllString(msg.Content, -1)
+	urls := xurls.Strict().FindAllString(msg.Content, -1)
 	tracks := []media.Track{}
 	for _, url := range urls {
 		u, err := neturl.Parse(url)
