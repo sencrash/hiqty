@@ -58,7 +58,7 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 	// Private calls can't have bots in them (yet?), as they're closely tied to the friend system,
 	// and bots can't have friends :<
 	// TODO: Reply to DMs with a big help blurb! It just needs to be written first...
-	if channel.IsPrivate {
+	if channel.Type==4 {
 		return
 	}
 
