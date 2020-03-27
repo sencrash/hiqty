@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	log "github.com/Sirupsen/logrus"
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 )
 
 // A Watcher watches Redis for keyspace events.

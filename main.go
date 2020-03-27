@@ -5,7 +5,7 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 	"github.com/joho/godotenv"
 	"github.com/uppfinnarn/hiqty/media"
 	"github.com/uppfinnarn/hiqty/media/soundcloud"

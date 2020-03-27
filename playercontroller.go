@@ -4,7 +4,7 @@ import (
 	"context"
 	log "github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 	"gopkg.in/redsync.v1"
 	"sync"
 )
