@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/pkg/errors"
-	"github.com/uppfinnarn/hiqty/media"
+	"github.com/sencrash/hiqty/media"
 )
 
 type TrackEnvelope struct {

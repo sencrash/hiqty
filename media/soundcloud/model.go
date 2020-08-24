@@ -1,7 +1,7 @@
 package soundcloud
 
 import (
-	"github.com/uppfinnarn/hiqty/media"
+	"github.com/sencrash/hiqty/media"
 )
 
 const (

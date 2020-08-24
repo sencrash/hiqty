@@ -8,7 +8,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/gomodule/redigo/redis"
 	"github.com/mvdan/xurls"
-	"github.com/uppfinnarn/hiqty/media"
+	"github.com/sencrash/hiqty/media"
 	neturl "net/url"
 	"strings"
 )
@@ -58,7 +58,7 @@ func (r *Responder) HandleMessageCreate(_ *discordgo.Session, msg *discordgo.Mes
 	// Private calls can't have bots in them (yet?), as they're closely tied to the friend system,
 	// and bots can't have friends :<
 	// TODO: Reply to DMs with a big help blurb! It just needs to be written first...
-	if channel.Type==4 {
+	if channel.Type == 4 {
 		return
 	}
 

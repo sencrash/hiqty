@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/uppfinnarn/hiqty/media"
+	"github.com/sencrash/hiqty/media"
 	"io/ioutil"
 	"net/http"
 	"net/url"
